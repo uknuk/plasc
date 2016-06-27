@@ -20,11 +20,13 @@ object Player {
 
   val re = "\\.mp3$|\\.mp4a$".r
 
+  val txtLength = Map("art" -> 25, "alb" -> 40, "track" -> 30)
+  val fontSize = Map("art" -> 8, "alb" -> 10, "track" -> 9)
+
   val btn = new Button {
     style = "-fx-text-fill: red"
     onAction = handle {ctlPlay}
   }
-
 
   val labels = Array("art", "alb","track", "sel")
     .map (k => (k, new Label { style = "-fx-text-fill: green" }))
@@ -61,11 +63,11 @@ object Player {
     onKeyReleased =  (e: KeyEvent) => {
       println(e.code)
       e.code match {
-        case KeyCode.BACK_QUOTE => {
+        case KeyCode.LESS | KeyCode.BACK_QUOTE => {
           val sm = selectionModel()
           sm.select(1 - sm.selectedIndex())
         }
-        case KeyCode.CLOSE_BRACKET => ctlPlay
+        case KeyCode.QUOTE | KeyCode.BACK_SLASH => ctlPlay
         case _ =>
       }
     }
@@ -77,11 +79,11 @@ object Player {
   def loadLast = {
     try {
       val data = Source.fromFile(sys.env("HOME") + "/.mhlast").getLines.toList
-      val art = new File(data(0))
-      this.selected = art.getPath
-      this.pos = data(2).toInt
-      loadAlbums(art)
-      loadTracks(new File(data(1)), this.pos)
+      val artist = new File(data(0))
+      selected = artist.getPath
+      pos = data(2).toFloat.toInt
+      loadAlbums(artist)
+      loadTracks(new File(data(1)), pos)
     }
     catch {
       case ex: FileNotFoundException =>
@@ -90,16 +92,16 @@ object Player {
   }
 
   def loadAlbums(dir :File) = {
-    this.root.selectionModel().select(0)
-    this.labels("sel").text = s"Albums of ${dir.getName}:"
-    show(dir.listFiles.toList.sorted, "alb", playTracks, 40)
-    this.selected = dir.getPath
+    root.selectionModel().select(0)
+    labels("sel").text = s"Albums of ${dir.getName}:"
+    show(dir.listFiles.toList.sorted, "alb", playTracks)
+    selected = dir.getPath
   }
 
   def loadArtists = {
     val dirs = Source.fromFile(sys.env("HOME") + "/.mhdirs").getLines.toList(0).split("\\s+")
     val files = dirs.map (d => (new File(d)).listFiles.toList)
-    show(files.flatten.toList.sorted, "art", loadAlbums, 25)
+    show(files.flatten.toList.sorted, "art", loadAlbums)
   }
 
   def playTracks(alb: File) = {
@@ -107,21 +109,21 @@ object Player {
   }
 
   def loadTracks(alb: File, idx: Int) = {
-    this.tracks.clear
-    this.panes("tracks").children.clear
+    tracks.clear
+    panes("tracks").children.clear
 
     if (alb.isFile && this.re.findFirstIn(alb.getName).nonEmpty) {
-      this.tracks += alb
-      this.labels("alb").text = this.re.replaceFirstIn(alb.getName, "")
+      tracks += alb
+      labels("alb").text = this.re.replaceFirstIn(alb.getName, "")
     }
     else {
       loadDir(alb);
-      this.labels("alb").text = alb.getName
+      labels("alb").text = alb.getName
     }
 
     this.alb = alb.getPath
-    this.art = this.selected
-    this.labels("art").text = this.selected.split("/").last
+    art = selected
+    labels("art").text = selected.split("/").last
     play(idx)
   }
 
@@ -130,20 +132,20 @@ object Player {
       if (file.isDirectory) {
         loadDir(file)
       }
-      else if (this.re.findFirstIn(file.getName).nonEmpty) {
-        val btn = makeButton(file, 30)
-        val n = this.tracks.length
+      else if (re.findFirstIn(file.getName).nonEmpty) {
+        val btn = makeButton(file, "track")
+        val n = tracks.length
         btn.onAction = handle { play(n) }
-        this.panes("tracks").children.add(btn)
-        this.tracks += file
+        panes("tracks").children.add(btn)
+        tracks += file
       }
     }
   }
 
-  def show(files: List[File], pane: String, fun: File => Unit, size: Int) = {
-    this.panes(pane).children.clear
+  def show(files: List[File], pane: String, fun: File => Unit) = {
+    panes(pane).children.clear
     files.map {file =>
-      val btn = makeButton(file, size)
+      val btn = makeButton(file, pane)
       btn.onAction = handle { fun(file) }
       this.panes(pane).children.add(btn)
     }
@@ -156,19 +158,19 @@ object Player {
     }
 
     if (i >= 0)
-      this.pos = i
+      pos = i
     else
-      this.pos += 1
+      pos += 1
 
-    val track = this.tracks(this.pos)
+    val track = this.tracks(pos)
     val m = new Media(track.toURI.toString)
     val mp = new MediaPlayer(m) {
       onEndOfMedia = play(-1)
     }
     mp.play
-    this.btn.text = "Pause"
+    btn.text = "Pause"
     this.mp = Some(mp)
-    this.labels("track").text = track.getName
+    labels("track").text = track.getName
     store
   }
 
@@ -198,10 +200,11 @@ object Player {
     out.close
   }
 
-  def makeButton(file: File, size: Int) = {
-    new Button(this.re.replaceFirstIn(file.getName, "").slice(0, size)) {
+  def makeButton(file: File, kind: String) = {
+    val size = fontSize(kind)
+    new Button(this.re.replaceFirstIn(file.getName, "").slice(0, txtLength(kind))) {
       mnemonicParsing = false
-      style = "-fx-text-fill: blue"
+      style = s"-fx-text-fill: blue; -fx-font-size: ${size}pt" 
     }
   }
 

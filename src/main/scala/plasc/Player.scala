@@ -1,11 +1,11 @@
 package plasc
 
 import java.io.{File, FileNotFoundException, PrintWriter}
-import scalafx.Includes._
 import scala.io.Source
+import scalafx.Includes._
 import scalafx.scene.control.{Label, TabPane, Tab, ScrollPane, Button}
 import scalafx.scene.layout.{FlowPane, HBox, VBox}
-import scalafx.scene.input.{KeyCode, KeyEvent, InputEvent}
+import scalafx.scene.input.{KeyCode, KeyEvent}
 import scalafx.geometry.Orientation
 import scalafx.event.ActionEvent
 import scalafx.scene.media.{MediaPlayer, Media}
@@ -20,11 +20,15 @@ object Player {
 
   val re = "\\.mp3$|\\.mp4a$".r
 
+  val btn = new Button {
+    style = "-fx-text-fill: red"
+    onAction = handle {ctlPlay}
+  }
+
+
   val labels = Array("art", "alb","track", "sel")
-    .map(k => (k, new Label {
-      style = "-fx-text-fill: green"
-    })
-  ).toMap
+    .map (k => (k, new Label { style = "-fx-text-fill: green" }))
+    .toMap
 
   val control = new HBox(10);
 
@@ -32,7 +36,8 @@ object Player {
     .map(k => (k, new FlowPane(Orientation.HORIZONTAL)))
     .toMap
 
-  labels.values.map(lbl => control.children.add(lbl))
+  labels.values.map(lbl => control.children += lbl)
+  control.children += btn
 
   val lbl = new Label("Tracks") {
     style =  "-fx-text-fill: green"
@@ -52,13 +57,17 @@ object Player {
         content = makeScroll(panes("art"))
       }
     )
-    onKeyReleased = handle { e: KeyEvent => {
-      println(e.eventType)
-      if (e.code == KeyCode.F1) {
-        val sm = selectionModel()
-        sm.select(1 - sm.selectedIndex())
+
+    onKeyReleased =  (e: KeyEvent) => {
+      println(e.code)
+      e.code match {
+        case KeyCode.BACK_QUOTE => {
+          val sm = selectionModel()
+          sm.select(1 - sm.selectedIndex())
+        }
+        case KeyCode.CLOSE_BRACKET => ctlPlay
+        case _ =>
       }
-    }
     }
   }
 
@@ -88,7 +97,7 @@ object Player {
   }
 
   def loadArtists = {
-    val dirs =  Source.fromFile(sys.env("HOME") + "/.mhdirs").getLines.toList(0).split("\\s+")
+    val dirs = Source.fromFile(sys.env("HOME") + "/.mhdirs").getLines.toList(0).split("\\s+")
     val files = dirs.map (d => (new File(d)).listFiles.toList)
     show(files.flatten.toList.sorted, "art", loadAlbums, 25)
   }
@@ -117,7 +126,7 @@ object Player {
   }
 
   def loadDir(dir: File): Unit = {
-    dir.listFiles.toList.sorted.map (file => {
+    dir.listFiles.toList.sorted.map {file =>
       if (file.isDirectory) {
         loadDir(file)
       }
@@ -129,17 +138,15 @@ object Player {
         this.tracks += file
       }
     }
-    )
   }
 
   def show(files: List[File], pane: String, fun: File => Unit, size: Int) = {
     this.panes(pane).children.clear
-    files.map (file => {
+    files.map {file =>
       val btn = makeButton(file, size)
       btn.onAction = handle { fun(file) }
       this.panes(pane).children.add(btn)
     }
-    )
   }
 
   def play(i: Int): Unit = {
@@ -159,10 +166,30 @@ object Player {
       onEndOfMedia = play(-1)
     }
     mp.play
+    this.btn.text = "Pause"
     this.mp = Some(mp)
     this.labels("track").text = track.getName
     store
   }
+
+  def ctlPlay: Unit = {
+    this.mp match {
+      case Some(mp) => {
+        mp.status() match {
+          case MediaPlayer.Status.Playing.delegate => {
+            this.btn.text = "Play"
+            mp.pause
+          }
+          case _ => {
+            this.btn.text = "Pause"
+            mp.play
+          }
+        }
+      }
+      case None =>
+    }
+  }
+
 
   def store = {
     val out = new PrintWriter(sys.env("HOME") + "/.mhlast")
